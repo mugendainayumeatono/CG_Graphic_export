@@ -44,22 +44,31 @@ class Palet:
         self._cache = {}
 
     def init_palettes(self, pal_dir):
+        errors = []
+        success_count = 0
         if not os.path.exists(pal_dir):
-            return
+            errors.append(f"调色板目录不存在: {pal_dir}")
+            return success_count, errors
         
         for filename in os.listdir(pal_dir):
-            if filename.startswith("palet_") and filename.endswith(".cgp"):
+            if filename.lower().startswith("palet_") and filename.lower().endswith(".cgp"):
                 try:
-                    parts = filename.split('_')
+                    parts = filename.lower().split('_')
                     index_str = parts[1].split('.')[0]
-                    index = int(index_str)
+                    try:
+                        index = int(index_str)
+                    except ValueError:
+                        index = index_str
                     
                     filepath = os.path.join(pal_dir, filename)
                     pal_data = self._load_palet(filepath)
                     if pal_data:
                         self._cache[index] = pal_data
+                        success_count += 1
                 except Exception as e:
-                    print(f"Failed to load palette {filename}: {e}")
+                    errors.append(f"加载调色板 {filename} 失败: {str(e)}")
+                    
+        return success_count, errors
                     
     def get_palet(self, index):
         if index in self._cache:
@@ -70,18 +79,14 @@ class Palet:
         colors = []
         colors.extend(HEAD_PLATE_RGB)
         
-        try:
-            with open(filepath, 'rb') as f:
-                for _ in range(224):
-                    data = f.read(3)
-                    if not data or len(data) < 3:
-                        break
-                    # B, G, R
-                    b, g, r = struct.unpack('BBB', data)
-                    colors.append((r, g, b, 255))
-        except Exception as e:
-            print(f"Error reading {filepath}: {e}")
-            return None
+        with open(filepath, 'rb') as f:
+            for _ in range(224):
+                data = f.read(3)
+                if not data or len(data) < 3:
+                    raise ValueError(f"调色板数据长度不足")
+                # B, G, R
+                b, g, r = struct.unpack('BBB', data)
+                colors.append((r, g, b, 255))
             
         colors.extend(FOOT_PLATE_RGB)
         

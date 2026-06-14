@@ -11,7 +11,7 @@ class GraphicDataManager:
 
     def get_graphic_image(self, info_data, palet_index=0):
         if not info_data.graphic_file or not os.path.exists(info_data.graphic_file):
-            return None
+            raise FileNotFoundError(f"找不到图像数据文件: {info_data.graphic_file}")
 
         with open(info_data.graphic_file, 'rb') as f:
             if info_data.is_encrypted:
@@ -52,7 +52,7 @@ class GraphicDataManager:
                 content = f.read(info_data.length)
 
         if len(content) < 16:
-            return None
+            raise ValueError(f"图像数据异常: 头文件长度不足 (len: {len(content)})")
             
         # Parse head
         rd = content[0:2]
@@ -169,8 +169,7 @@ class GraphicDataManager:
             palet = palet_manager.get_palet(0)
 
         if not palet:
-            # Fallback to empty image
-            return Image.new("RGBA", (info_data.width, info_data.height), (0,0,0,0))
+            raise RuntimeError("调色板缺失，无法渲染该图像")
             
         # Map indices to pixels
         # Create numpy array for fast mapping

@@ -29,16 +29,25 @@ class GraphicInfoManager:
         self.encrypt_key = b""
         
     def init_graphics(self, bin_dir):
+        errors = []
+        success_count = 0
         if not os.path.exists(bin_dir):
-            return
+            errors.append(f"Graphic目录不存在: {bin_dir}")
+            return success_count, errors
             
         directories = [bin_dir]
         directories.extend([os.path.join(bin_dir, d) for d in os.listdir(bin_dir) if os.path.isdir(os.path.join(bin_dir, d))])
         
         for directory in directories:
-            self._analysis_directory(directory)
+            sc, errs = self._analysis_directory(directory)
+            success_count += sc
+            errors.extend(errs)
+            
+        return success_count, errors
             
     def _analysis_directory(self, directory):
+        errors = []
+        success_count = 0
         files = os.listdir(directory)
         info_files = [f for f in files if f.lower().startswith('graphicinfo') and f.lower().endswith('.bin')]
         
@@ -57,7 +66,7 @@ class GraphicInfoManager:
                     break
                     
             if not graphic_file_path:
-                print(f"Cannot find graphic file for {info_file}")
+                errors.append(f"找不到索引文件 {info_file} 对应的图像数据文件 {graphic_filename}")
                 continue
                 
             info_file_path = os.path.join(directory, info_file)
@@ -65,9 +74,16 @@ class GraphicInfoManager:
             if not full_version:
                 version = version.upper()
                 
-            self._load_graphic_info(version, info_file_path, graphic_file_path)
+            try:
+                sc = self._load_graphic_info(version, info_file_path, graphic_file_path)
+                success_count += sc
+            except Exception as e:
+                errors.append(f"解析文件失败 {info_file}: {str(e)}")
+                
+        return success_count, errors
             
     def _load_graphic_info(self, version, info_file_path, graphic_file_path):
+        success_count = 0
         if version not in self._index_cache:
             self._index_cache[version] = {}
             
@@ -107,29 +123,34 @@ class GraphicInfoManager:
                 if len(data) < 40:
                     break
                 
-                info = GraphicInfoData()
-                info.index = struct.unpack_from('<I', data, 0)[0]
-                info.addr = struct.unpack_from('<I', data, 4)[0]
-                info.length = struct.unpack_from('<I', data, 8)[0]
-                info.offset_x = struct.unpack_from('<i', data, 12)[0]
-                info.offset_y = struct.unpack_from('<i', data, 16)[0]
-                info.width = struct.unpack_from('<I', data, 20)[0]
-                info.height = struct.unpack_from('<I', data, 24)[0]
-                info.east = data[28]
-                info.south = data[29]
-                info.blocked = (data[30] % 2) == 0
-                info.as_ground = data[31] == 1
-                # 32-35 unknown
-                info.serial = struct.unpack_from('<I', data, 36)[0]
-                info.graphic_file = graphic_file_path
-                info.is_encrypted = is_encrypted
-                info.pwd_index = pwd_index
-                info.pwd_len = pwd_len
-                info.pwd = pwd
-                
-                self._index_cache[version][info.index] = info
-                if info.serial != 0:
-                    self._cache[info.serial] = info
+                try:
+                    info = GraphicInfoData()
+                    info.index = struct.unpack_from('<I', data, 0)[0]
+                    info.addr = struct.unpack_from('<I', data, 4)[0]
+                    info.length = struct.unpack_from('<I', data, 8)[0]
+                    info.offset_x = struct.unpack_from('<i', data, 12)[0]
+                    info.offset_y = struct.unpack_from('<i', data, 16)[0]
+                    info.width = struct.unpack_from('<I', data, 20)[0]
+                    info.height = struct.unpack_from('<I', data, 24)[0]
+                    info.east = data[28]
+                    info.south = data[29]
+                    info.blocked = (data[30] % 2) == 0
+                    info.as_ground = data[31] == 1
+                    # 32-35 unknown
+                    info.serial = struct.unpack_from('<I', data, 36)[0]
+                    info.graphic_file = graphic_file_path
+                    info.is_encrypted = is_encrypted
+                    info.pwd_index = pwd_index
+                    info.pwd_len = pwd_len
+                    info.pwd = pwd
+                    
+                    self._index_cache[version][info.index] = info
+                    if info.serial != 0:
+                        self._cache[info.serial] = info
+                    success_count += 1
+                except struct.error:
+                    continue
+        return success_count
 
     def get_graphic_info(self, serial):
         return self._cache.get(serial)
